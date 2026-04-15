@@ -102,20 +102,27 @@ As the simulation runs, vehicles enter from the map boundary, move through the g
 
 ## Installation
 
-Create and activate a virtual environment, then install dependencies:
+This project uses a **conda environment**. Make sure `conda` (or `mamba`) is available before proceeding.
+
+Create and activate the environment:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+conda create -n traffic_sim python=3.11 -y
+conda activate traffic_sim
 pip install -r requirements.txt
 ```
 
-`requirements.txt` installs the CPU and visualization stack. `CuPy` should be installed separately on a supported CUDA system because the package and wheel choice depends on the target GPU environment. On this macOS machine, `CuPy` is not supported.
-
-Example for a CUDA-enabled Linux system:
+`requirements.txt` installs the CPU and visualization stack. `CuPy` must be installed separately because the right package depends on the CUDA version on your system. Check the CUDA version first:
 
 ```bash
-pip install cupy-cuda12x
+nvcc --version   # or: nvidia-smi
+```
+
+Then install the matching CuPy build, for example:
+
+```bash
+pip install cupy-cuda12x   # CUDA 12.x
+# pip install cupy-cuda11x # CUDA 11.x
 ```
 
 ## Run the Visual Demo
@@ -123,13 +130,14 @@ pip install cupy-cuda12x
 From the repository root:
 
 ```bash
-source .venv/bin/activate
+conda activate traffic_sim
 PYTHONPATH=src python -m traffic_sim.main --backend cpu --steps 500
 ```
 
 Try the GPU backend once `CuPy` is installed:
 
 ```bash
+conda activate traffic_sim
 PYTHONPATH=src python -m traffic_sim.main --backend gpu --steps 500
 ```
 

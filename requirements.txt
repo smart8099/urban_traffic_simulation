@@ -1,5 +1,12 @@
 numpy>=2.0
 pygame>=2.5
 matplotlib>=3.9
-# Optional GPU dependency for supported CUDA Linux environments only.
-# Example: cupy-cuda12x>=13.0
+pandas>=2.0
+tqdm>=4.0
+mpi4py>=3.1
+
+# GPU dependency — install the build that matches your CUDA version.
+# Check with: nvidia-smi  (no sudo needed)
+# Or on a module-based cluster: module avail cuda
+cupy-cuda12x>=13.0     # CUDA 12.x (cluster has 12.3)
+# cupy-cuda11x>=13.0   # CUDA 11.x (also available on cluster as cuda/11.6)
