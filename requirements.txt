@@ -1,0 +1,5 @@
+numpy>=2.0
+pygame>=2.5
+matplotlib>=3.9
+# Optional GPU dependency for supported CUDA Linux environments only.
+# Example: cupy-cuda12x>=13.0
