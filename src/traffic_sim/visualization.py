@@ -7,9 +7,9 @@ from .models import CellType, LightPhase
 
 
 BACKGROUND = (245, 242, 232)
-ROAD = (94, 103, 110)
-INTERSECTION = (62, 70, 76)
-VEHICLE = (196, 62, 62)
+ROAD = (44, 48, 54)
+INTERSECTION = (155, 162, 168)
+VEHICLE = (32, 102, 200)
 GRID_LINE = (220, 216, 205)
 TEXT = (35, 38, 41)
 GREEN = (51, 145, 92)
@@ -72,13 +72,13 @@ class TrafficVisualizer:
                 pygame.draw.rect(self.surface, color, rect)
                 pygame.draw.rect(self.surface, GRID_LINE, rect, 1)
 
-                if cell == CellType.INTERSECTION and light_phase is not None:
-                    light_color = GREEN if light_phase == LightPhase.HORIZONTAL_GREEN else RED
-                    pygame.draw.circle(self.surface, light_color, rect.center, max(2, self.config.cell_size // 4))
-
                 if occupancy[y, x] != -1:
                     inset = max(2, self.config.cell_size // 6)
                     pygame.draw.rect(self.surface, VEHICLE, rect.inflate(-inset, -inset))
+
+                if cell == CellType.INTERSECTION and light_phase is not None:
+                    light_color = GREEN if light_phase == LightPhase.HORIZONTAL_GREEN else RED
+                    pygame.draw.circle(self.surface, light_color, rect.center, max(2, self.config.cell_size // 4))
 
     def _draw_status_bar(self, simulation, metrics) -> None:
         """Render a compact text summary of the latest simulation metrics."""
