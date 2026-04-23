@@ -13,6 +13,6 @@ class SimulationConfig:
     spawn_attempts_per_step: int = 2
     light_cycle_steps: int = 20
     turn_probability: float = 0.2
-    cell_size: int = 12
+    cell_size: int = 10
     fps: int = 30
     random_seed: int = 7
