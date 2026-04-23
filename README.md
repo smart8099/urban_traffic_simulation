@@ -10,17 +10,16 @@ The simulator models vehicle movement on a 2D grid road network with intersectio
 
 ## Project Status
 
-This repository currently contains a working phase-1 prototype:
+This repository contains a working CPU + GPU simulation:
 
 - package layout
 - scenario configuration
 - grid generation
 - CPU simulation with boundary spawning, lane-aligned movement, traffic lights, and basic queueing
-- GPU interface stub structured around `CuPy`
+- **Fully vectorized CuPy GPU implementation** — parallel vehicle spawning, turn resolution via GPU turn tables, traffic-light gating, and conflict-free movement using `cupyx.scatter_min`
 - `pygame` visualization entry point
 - experiment runner for timing and metric collection
-
-The next step is to strengthen movement conflict resolution, improve metrics, and replace the GPU stub with true accelerated state updates.
+- SLURM job scripts for running CPU and GPU benchmarks on the cluster (`run_slurm_cpu.sh`, `run_slurm_gpu.sh`)
 
 ## Tech Stack
 
@@ -180,13 +179,29 @@ PYTHONPATH=src python -m traffic_sim.main --backend cpu --steps 500 --benchmark
 - `--headless` runs without opening the `pygame` window
 - `--benchmark` prints timing and summary metrics
 
+## Running on the Cluster (SLURM)
+
+Two SLURM job scripts are provided at the project root.
+
+Submit the CPU benchmark:
+
+```bash
+sbatch run_slurm_cpu.sh
+```
+
+Submit the GPU benchmark (requests one GPU):
+
+```bash
+sbatch run_slurm_gpu.sh
+```
+
+Output and error files land in `logs/slurm_success/` and `logs/slurm_errors/` respectively.  Both scripts load CUDA 12.3, activate the `traffic_sim` conda environment, and run a 512 × 512 grid with 20 000 vehicles for 500 steps.
+
 ## Immediate Development Plan
 
-1. Improve movement conflict resolution with an explicit intent-resolution phase.
-2. Track richer metrics such as travel time, throughput by window, and intersection queue length.
-3. Replace the current GPU wrapper with real `CuPy`-based parallel updates.
-4. Add benchmark scenarios for different grid sizes and traffic densities.
-5. Generate plots for the final report.
+1. Track richer metrics such as travel time, throughput by window, and intersection queue length.
+2. Add benchmark scenarios for different grid sizes and traffic densities.
+3. Generate CPU vs. GPU speedup plots for the final report.
 
 ## Mapping to the Paper
 
