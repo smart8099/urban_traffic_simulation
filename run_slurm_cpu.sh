@@ -39,12 +39,27 @@ PYTHONPATH=src python -m traffic_sim.main \
   --backend cpu \
   --width 512 \
   --height 512 \
-  --max-vehicles 20000 \
-  --steps 500 \
-  --spawn-rate 0.8 \
-  --spawn-attempts 3 \
+  --max-vehicles 100000 \
+  --steps 2000 \
+  --spawn-rate 1.0 \
+  --spawn-attempts 30 \
   --headless \
   --benchmark
+
+### Record a small visualization GIF for this run (headless, dummy SDL driver).
+# echo "Recording CPU visualization GIF"
+# PYTHONPATH=src python -m traffic_sim.main \
+#   --backend cpu \
+#   --width 64 \
+#   --height 64 \
+#   --max-vehicles 500 \
+#   --steps 300 \
+#   --spawn-rate 0.8 \
+#   --spawn-attempts 3 \
+#   --headless \
+#   --save-gif \
+#   --gif-tag slurm \
+#   --gif-fps 15
 
 echo "Deactivating environment"
 conda deactivate

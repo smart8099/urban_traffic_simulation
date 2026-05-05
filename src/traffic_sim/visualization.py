@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pygame
 
 from .config import SimulationConfig
@@ -19,32 +22,55 @@ RED = (182, 59, 59)
 class TrafficVisualizer:
     """Render the simulation grid and summary metrics with pygame."""
 
-    def __init__(self, config: SimulationConfig) -> None:
+    def __init__(
+        self,
+        config: SimulationConfig,
+        save_gif_path: str | None = None,
+        gif_fps: int = 10,
+        headless: bool = False,
+    ) -> None:
         """Create the pygame window, clock, and font resources."""
+
+        if headless:
+            os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
         pygame.init()
         self.config = config
-        self.surface = pygame.display.set_mode(
-            (config.grid_width * config.cell_size, config.grid_height * config.cell_size + 104)
+        self.headless = headless
+        size = (
+            config.grid_width * config.cell_size,
+            config.grid_height * config.cell_size + 104,
         )
+        self.surface = pygame.display.set_mode(size)
         pygame.display.set_caption("Traffic Simulation")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("Menlo", 18)
         self.small_font = pygame.font.SysFont("Menlo", 14)
 
+        self.save_gif_path = save_gif_path
+        self.gif_fps = max(1, int(gif_fps))
+        self._frames: list[bytes] = []
+        self._frame_size = size
+
     def draw(self, simulation, metrics) -> bool:
         """Draw one frame and return False when the user closes the window."""
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return False
+        if not self.headless:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return False
 
         self.surface.fill(BACKGROUND)
         self._draw_grid(simulation)
         self._draw_status_bar(simulation, metrics)
         self._draw_legend(simulation)
         pygame.display.flip()
-        self.clock.tick(self.config.fps)
+
+        if self.save_gif_path is not None:
+            self._frames.append(pygame.image.tostring(self.surface, "RGB"))
+
+        if not self.headless:
+            self.clock.tick(self.config.fps)
         return True
 
     def _draw_grid(self, simulation) -> None:
@@ -127,6 +153,31 @@ class TrafficVisualizer:
         self.surface.blit(info, (10, base_y + 32))
 
     def close(self) -> None:
-        """Release pygame resources and close the visualization window."""
+        """Release pygame resources, write the GIF if requested, and close the window."""
+
+        if self.save_gif_path is not None and self._frames:
+            self._write_gif()
 
         pygame.quit()
+
+    def _write_gif(self) -> None:
+        """Encode captured frames into an animated GIF using Pillow."""
+
+        from PIL import Image
+
+        out_path = Path(self.save_gif_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        images = [
+            Image.frombytes("RGB", self._frame_size, frame) for frame in self._frames
+        ]
+        duration_ms = int(1000 / self.gif_fps)
+        images[0].save(
+            out_path,
+            save_all=True,
+            append_images=images[1:],
+            duration=duration_ms,
+            loop=0,
+            optimize=False,
+        )
+        print(f"Saved GIF with {len(images)} frames to {out_path}")

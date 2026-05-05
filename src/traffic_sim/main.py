@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
+from pathlib import Path
 
 from .config import SimulationConfig
 from .experiments import run_benchmark
@@ -23,7 +25,35 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--turn-probability", type=float, default=0.2)
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--benchmark", action="store_true")
+    parser.add_argument(
+        "--save-gif",
+        action="store_true",
+        help="Record the visualization to outputs/gifs/<run_name>/run.gif.",
+    )
+    parser.add_argument(
+        "--gif-tag",
+        type=str,
+        default=None,
+        help="Optional suffix appended to the auto-generated run folder name.",
+    )
+    parser.add_argument(
+        "--gif-fps",
+        type=int,
+        default=10,
+        help="Playback frame rate for the saved GIF.",
+    )
     return parser.parse_args()
+
+
+def resolve_gif_path(args: argparse.Namespace) -> Path:
+    """Build a unique outputs/gifs/<run_name>/run.gif path for this run."""
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    parts = [args.backend, timestamp]
+    if args.gif_tag:
+        parts.append(args.gif_tag)
+    run_name = "_".join(parts)
+    return Path("outputs") / "gifs" / run_name / "run.gif"
 
 
 def build_config(args: argparse.Namespace) -> SimulationConfig:
@@ -53,8 +83,14 @@ def run_visual_demo(args: argparse.Namespace, config: SimulationConfig) -> None:
 
     from .visualization import TrafficVisualizer
 
+    gif_path = str(resolve_gif_path(args)) if args.save_gif else None
     simulation = create_simulation(args.backend, config)
-    visualizer = TrafficVisualizer(config)
+    visualizer = TrafficVisualizer(
+        config,
+        save_gif_path=gif_path,
+        gif_fps=args.gif_fps,
+        headless=args.headless,
+    )
 
     try:
         for _ in range(args.steps):
@@ -77,7 +113,7 @@ def main() -> None:
             print(f"{key}: {value}")
         return
 
-    if args.headless:
+    if args.headless and not args.save_gif:
         simulation = create_simulation(args.backend, config)
         metrics = None
         for _ in range(args.steps):

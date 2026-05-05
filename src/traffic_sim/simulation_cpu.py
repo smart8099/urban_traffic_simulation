@@ -136,45 +136,126 @@ class CPUTrafficSimulation:
         return True
 
     def step(self) -> SimulationMetrics:
-        """Advance the simulation by one timestep and return updated metrics."""
+        """Advance the simulation by one timestep using an explicit 3-phase pipeline."""
 
         self.step_count += 1
         self.spawn_vehicle()
 
         active_ids = np.flatnonzero(self.vehicle_active)
-        next_occupancy = np.full_like(self.occupancy, -1)
-        queue_count = 0
+        if active_ids.size == 0:
+            self.occupancy = np.full_like(self.occupancy, -1)
+            return SimulationMetrics(
+                steps=self.step_count,
+                active_vehicles=0,
+                completed_vehicles=self.completed_vehicles,
+                average_queue_length=0.0,
+            )
 
-        for vehicle_id in active_ids:
-            x = int(self.vehicle_x[vehicle_id])
-            y = int(self.vehicle_y[vehicle_id])
-            direction = int(self.vehicle_direction[vehicle_id])
+        width = self.config.grid_width
+        height = self.config.grid_height
+        phase = self.current_light_phase()
+        n = active_ids.size
+
+        # Phase 1: per-vehicle intents (side-effect free).
+        intent_target = np.full(n, -1, dtype=np.int64)
+        wants_move = np.zeros(n, dtype=bool)
+        exits = np.zeros(n, dtype=bool)
+        new_direction = np.zeros(n, dtype=np.int8)
+
+        for i in range(n):
+            vid = int(active_ids[i])
+            x = int(self.vehicle_x[vid])
+            y = int(self.vehicle_y[vid])
+            d = int(self.vehicle_direction[vid])
+
             if self.intersections[y, x]:
-                direction = self._choose_intersection_direction(direction)
-                self.vehicle_direction[vehicle_id] = direction
+                d = self._choose_intersection_direction(d)
+            new_direction[i] = d
 
-            next_x, next_y = self._next_position(x, y, direction)
+            nx, ny = self._next_position(x, y, d)
 
-            if not (0 <= next_x < self.config.grid_width and 0 <= next_y < self.config.grid_height):
-                self.vehicle_active[vehicle_id] = False
-                self.completed_vehicles += 1
+            if not (0 <= nx < width and 0 <= ny < height):
+                exits[i] = True
                 continue
 
-            if not self._can_enter_next_cell(x, y, direction, next_x, next_y):
-                next_occupancy[y, x] = vehicle_id
+            if not self._can_enter_next_cell(x, y, d, nx, ny):
+                continue  # blocked by light, stays put
+
+            intent_target[i] = ny * width + nx
+            wants_move[i] = True
+
+        self.vehicle_direction[active_ids] = new_direction
+
+        # Phase 2: conflict resolution — lowest active_ids index wins its target cell.
+        # active_ids is sorted ascending, so iterating in order gives "lowest vehicle id first".
+        cell_winner: dict[int, int] = {}
+        for i in range(n):
+            if wants_move[i]:
+                t = int(intent_target[i])
+                if t not in cell_winner:
+                    cell_winner[t] = i
+
+        wins_conflict = np.zeros(n, dtype=bool)
+        for i in range(n):
+            if wants_move[i] and cell_winner[int(intent_target[i])] == i:
+                wins_conflict[i] = True
+
+        # Phase 3: chain-move fixed-point resolution.
+        # A vehicle will_move iff it wins conflict AND (target is empty OR occupant will_move).
+        id_to_local: dict[int, int] = {int(vid): i for i, vid in enumerate(active_ids)}
+        will_move = np.zeros(n, dtype=bool)
+
+        # Seed: vehicles whose target is currently empty.
+        for i in range(n):
+            if wins_conflict[i]:
+                t = int(intent_target[i])
+                ty, tx = divmod(t, width)
+                if self.occupancy[ty, tx] == -1:
+                    will_move[i] = True
+
+        # Propagate along chains until no changes.
+        changed = True
+        while changed:
+            changed = False
+            for i in range(n):
+                if will_move[i] or not wins_conflict[i]:
+                    continue
+                t = int(intent_target[i])
+                ty, tx = divmod(t, width)
+                occ = int(self.occupancy[ty, tx])
+                if occ == -1:
+                    continue
+                occ_idx = id_to_local.get(occ, -1)
+                if occ_idx >= 0 and will_move[occ_idx]:
+                    will_move[i] = True
+                    changed = True
+
+        # Apply exits.
+        exit_ids = active_ids[exits]
+        if exit_ids.size > 0:
+            self.vehicle_active[exit_ids] = False
+            self.completed_vehicles += int(exit_ids.size)
+
+        # Apply moves and rebuild occupancy.
+        new_occupancy = np.full_like(self.occupancy, -1)
+        queue_count = 0
+        for i in range(n):
+            if exits[i]:
+                continue
+            vid = int(active_ids[i])
+            if will_move[i]:
+                t = int(intent_target[i])
+                ty, tx = divmod(t, width)
+                self.vehicle_x[vid] = tx
+                self.vehicle_y[vid] = ty
+                new_occupancy[ty, tx] = vid
+            else:
+                x = int(self.vehicle_x[vid])
+                y = int(self.vehicle_y[vid])
+                new_occupancy[y, x] = vid
                 queue_count += 1
-                continue
 
-            if self.occupancy[next_y, next_x] != -1 or next_occupancy[next_y, next_x] != -1:
-                next_occupancy[y, x] = vehicle_id
-                queue_count += 1
-                continue
-
-            self.vehicle_x[vehicle_id] = next_x
-            self.vehicle_y[vehicle_id] = next_y
-            next_occupancy[next_y, next_x] = vehicle_id
-
-        self.occupancy = next_occupancy
+        self.occupancy = new_occupancy
 
         active_vehicles = int(self.vehicle_active.sum())
         average_queue = queue_count / active_vehicles if active_vehicles else 0.0

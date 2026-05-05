@@ -4,6 +4,7 @@ matplotlib>=3.9
 pandas>=2.0
 tqdm>=4.0
 mpi4py>=3.1
+Pillow>=10.0
 
 # GPU dependency — install the build that matches your CUDA version.
 # Check with: nvidia-smi  (no sudo needed)

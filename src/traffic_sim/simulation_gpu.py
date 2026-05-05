@@ -170,22 +170,43 @@ class GPUTrafficSimulation:
         blocked_by_light = entering_intersection & ~light_allows
 
         target_occupancy = self.occupancy[safe_ny, safe_nx]
-        target_empty = (~out_of_bounds) & (target_occupancy == -1)
 
-        can_attempt = (~out_of_bounds) & (~blocked_by_light) & target_empty
+        # Phase 1/2: wants_move = in-bounds and light-permitted; conflict resolution by scatter_min.
+        wants_move = (~out_of_bounds) & (~blocked_by_light)
 
         target_1d = safe_ny * width + safe_nx
         sentinel = cp.int32(self.config.max_vehicles + 1)
         intent = cp.full(height * width, sentinel, dtype=cp.int32)
 
-        cand_idx = cp.flatnonzero(can_attempt)
-        moved = cp.zeros(int(active_ids.size), dtype=cp.bool_)
-        if cand_idx.size > 0:
-            cand_targets = target_1d[cand_idx]
-            cand_vids = active_ids[cand_idx].astype(cp.int32)
-            cupyx.scatter_min(intent, cand_targets, cand_vids)
-            winners = intent[cand_targets] == cand_vids
-            moved[cand_idx] = winners
+        wants_idx = cp.flatnonzero(wants_move)
+        wins_conflict = cp.zeros(int(active_ids.size), dtype=cp.bool_)
+        if wants_idx.size > 0:
+            wants_targets = target_1d[wants_idx]
+            wants_vids = active_ids[wants_idx].astype(cp.int32)
+            cupyx.scatter_min(intent, wants_targets, wants_vids)
+            wins_conflict[wants_idx] = intent[wants_targets] == wants_vids
+
+        # Phase 3: fixed-point chain resolution.
+        # id_to_local maps a global vehicle_id -> its index in active_ids (or -1).
+        id_to_local = cp.full(self.config.max_vehicles, -1, dtype=cp.int32)
+        id_to_local[active_ids] = cp.arange(int(active_ids.size), dtype=cp.int32)
+
+        target_has_vehicle = (~out_of_bounds) & (target_occupancy != -1)
+        safe_occ = cp.where(target_has_vehicle, target_occupancy, 0)
+        target_occ_local = cp.where(target_has_vehicle, id_to_local[safe_occ], -1)
+
+        target_empty = (~out_of_bounds) & (target_occupancy == -1)
+        moved = wins_conflict & target_empty
+
+        max_iters = height + width  # loose upper bound on chain length
+        for _ in range(max_iters):
+            can_propagate = wins_conflict & (~moved) & (target_occ_local >= 0)
+            safe_occ_local = cp.where(target_occ_local >= 0, target_occ_local, 0)
+            occupant_moves = moved[safe_occ_local] & (target_occ_local >= 0)
+            new_moves = can_propagate & occupant_moves
+            if not bool(new_moves.any()):
+                break
+            moved = moved | new_moves
 
         queued = (~out_of_bounds) & (~moved)
 
