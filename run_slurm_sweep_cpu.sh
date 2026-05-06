@@ -15,7 +15,9 @@ conda activate /home/dmasamba01/anaconda3/envs/traffic_sim
 
 cd /home/dmasamba01/parallel_computing/urban_traffic_simulation
 
-CSV=logs/sweeps/sweep_cpu.csv
+RUN_ID=${SLURM_JOB_ID:-$(date +%Y%m%d_%H%M%S)}
+CSV=logs/sweeps/sweep_cpu_${RUN_ID}.csv
+echo "Writing results to $CSV"
 
 echo "[1/2] CPU spawn-attempts sweep at fixed 512x512 grid"
 PYTHONPATH=src python scripts/sweep.py \

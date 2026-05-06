@@ -39,10 +39,10 @@ PYTHONPATH=src python -m traffic_sim.main \
   --backend cpu \
   --width 512 \
   --height 512 \
-  --max-vehicles 100000 \
+  --max-vehicles 20000 \
   --steps 2000 \
-  --spawn-rate 1.0 \
-  --spawn-attempts 30 \
+  --spawn-rate 0.8 \
+  --spawn-attempts 10 \
   --headless \
   --benchmark
 

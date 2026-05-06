@@ -19,7 +19,10 @@ This repository contains a working CPU + GPU simulation:
 - **Fully vectorized CuPy GPU implementation** — parallel vehicle spawning, turn resolution via GPU turn tables, traffic-light gating, and conflict-free movement using `cupyx.scatter_min`
 - `pygame` visualization entry point
 - experiment runner for timing and metric collection
+- optional GIF recording of the visualization (`--save-gif`)
 - SLURM job scripts for running CPU and GPU benchmarks on the cluster (`run_slurm_cpu.sh`, `run_slurm_gpu.sh`)
+- parameter-sweep driver (`scripts/sweep.py`) plus SLURM wrappers (`run_slurm_sweep_cpu.sh`, `run_slurm_sweep_gpu.sh`) that scan over grid sizes and spawn rates
+- CPU vs. GPU plotting script (`scripts/plot_sweeps.py`) producing throughput, simulation-rate, speedup, and wall-time figures
 
 ## Tech Stack
 
@@ -32,9 +35,18 @@ This repository contains a working CPU + GPU simulation:
 ## Repository Layout
 
 ```text
-final_project/
+urban_traffic_simulation/
 ├── README.md
 ├── requirements.txt
+├── run_slurm_cpu.sh
+├── run_slurm_gpu.sh
+├── run_slurm_sweep_cpu.sh
+├── run_slurm_sweep_gpu.sh
+├── logs/                       # SLURM stdout/stderr and sweep CSVs
+├── outputs/                    # recorded GIFs (outputs/gifs/<run>/run.gif)
+├── scripts/
+│   ├── sweep.py                # benchmark sweep driver (CSV output)
+│   └── plot_sweeps.py          # CPU vs. GPU plots from sweep CSVs
 └── src/
     └── traffic_sim/
         ├── __init__.py
@@ -178,6 +190,9 @@ PYTHONPATH=src python -m traffic_sim.main --backend cpu --steps 500 --benchmark
 - `--turn-probability` controls how often vehicles turn at intersections
 - `--headless` runs without opening the `pygame` window
 - `--benchmark` prints timing and summary metrics
+- `--save-gif` records the visualization to `outputs/gifs/<backend>_<timestamp>/run.gif`
+- `--gif-tag` appends a suffix to the auto-generated GIF run folder
+- `--gif-fps` sets the playback frame rate of the saved GIF
 
 ## Running on the Cluster (SLURM)
 
@@ -197,11 +212,56 @@ sbatch run_slurm_gpu.sh
 
 Output and error files land in `logs/slurm_success/` and `logs/slurm_errors/` respectively.  Both scripts load CUDA 12.3, activate the `traffic_sim` conda environment, and run a 512 × 512 grid with 20 000 vehicles for 500 steps.
 
+## Parameter Sweeps and Plots
+
+`scripts/sweep.py` runs a cross-product of grid sizes, `spawn_attempts_per_step`, and `spawn_rate` values for one backend, appending one row per configuration / trial to a CSV. Example:
+
+```bash
+PYTHONPATH=src python scripts/sweep.py \
+  --backend gpu \
+  --output logs/sweeps/sweep_gpu.csv \
+  --grid-list 64,128,256,512,1024 \
+  --spawn-attempts-list 30 \
+  --spawn-rate-list 1.0 \
+  --repeats 3 \
+  --steps 1000
+```
+
+`--spawn-rate-list` enables density sweeps; `--repeats` runs each configuration N times so the plotting script can average out noise.
+
+Two sets of SLURM wrappers are provided:
+
+```bash
+# Baseline recipe: spawn-attempts sweep at 512x512 + grid sweep at spawn_attempts=30
+sbatch run_slurm_sweep_cpu.sh
+sbatch run_slurm_sweep_gpu.sh
+
+# Extended recipe: 3x repeats + tiny grids (16, 32) + density sweep + 2048 GPU run
+sbatch run_slurm_extra_cpu.sh
+sbatch run_slurm_extra_gpu.sh
+```
+
+A separate job records the demo GIFs used for the visualization slide:
+
+```bash
+sbatch run_slurm_record_gifs.sh   # writes outputs/gifs/<run>/run.gif (light, dense, smallgrid)
+```
+
+Once both backends have produced CSVs, generate the comparison figures:
+
+```bash
+python scripts/plot_sweeps.py --tag final
+```
+
+This emits one set of figures per sweep dimension (grid / spawn_attempts / density) × four metrics (simulation_rate / throughput / wall_time / speedup) into `logs/sweeps/`, e.g. `speedup_grid_final.png`, `simulation_rate_density_final.png`. Use `--sweeps grid,density` to regenerate a subset.
+
+[PRESENTATION_UPDATES.md](PRESENTATION_UPDATES.md) maps these figures and the recorded GIFs onto specific slides of the project deck.
+
 ## Immediate Development Plan
 
 1. Track richer metrics such as travel time, throughput by window, and intersection queue length.
-2. Add benchmark scenarios for different grid sizes and traffic densities.
-3. Generate CPU vs. GPU speedup plots for the final report.
+2. ~~Add benchmark scenarios for different grid sizes and traffic densities.~~ — done via `scripts/sweep.py` and the sweep SLURM scripts.
+3. ~~Generate CPU vs. GPU speedup plots for the final report.~~ — done via `scripts/plot_sweeps.py`; refine plot styling and pick final figures for the report.
 
 ## Mapping to the Paper
 

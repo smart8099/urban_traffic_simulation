@@ -66,6 +66,17 @@ def main() -> None:
         help="Comma-separated list of spawn_attempts_per_step values",
     )
     parser.add_argument(
+        "--spawn-rate-list",
+        default=None,
+        help="Comma-separated list of spawn_rate values. Overrides --spawn-rate when set.",
+    )
+    parser.add_argument(
+        "--repeats",
+        type=int,
+        default=1,
+        help="Number of trials per (grid, spawn_attempts, spawn_rate) configuration.",
+    )
+    parser.add_argument(
         "--warmup-steps",
         type=int,
         default=50,
@@ -75,6 +86,10 @@ def main() -> None:
 
     grid_sizes = [int(v) for v in args.grid_list.split(",")]
     spawn_values = [int(v) for v in args.spawn_attempts_list.split(",")]
+    if args.spawn_rate_list:
+        spawn_rate_values = [float(v) for v in args.spawn_rate_list.split(",")]
+    else:
+        spawn_rate_values = [args.spawn_rate]
 
     if args.warmup_steps > 0:
         warmup_config = SimulationConfig(
@@ -99,6 +114,7 @@ def main() -> None:
         "height",
         "max_vehicles",
         "spawn_rate",
+        "trial",
         "elapsed_seconds",
         "steps_per_second",
         "active_vehicles",
@@ -114,43 +130,47 @@ def main() -> None:
 
         for size in grid_sizes:
             for spawn_attempts in spawn_values:
-                config = SimulationConfig(
-                    grid_width=size,
-                    grid_height=size,
-                    max_vehicles=args.max_vehicles,
-                    spawn_rate=args.spawn_rate,
-                    spawn_attempts_per_step=spawn_attempts,
-                )
-                print(
-                    f"  running {args.backend} grid={size}x{size} "
-                    f"spawn_attempts={spawn_attempts}...",
-                    flush=True,
-                )
-                metrics, elapsed = run_one(args.backend, args.steps, config)
-                steps_per_second = args.steps / elapsed if elapsed > 0 else 0.0
-                row = {
-                    "backend": args.backend,
-                    "spawn_attempts": spawn_attempts,
-                    "steps": args.steps,
-                    "width": size,
-                    "height": size,
-                    "max_vehicles": args.max_vehicles,
-                    "spawn_rate": args.spawn_rate,
-                    "elapsed_seconds": elapsed,
-                    "steps_per_second": steps_per_second,
-                    "active_vehicles": metrics.active_vehicles,
-                    "completed_vehicles": metrics.completed_vehicles,
-                    "average_queue_length": metrics.average_queue_length,
-                    "vehicle_steps_per_second": steps_per_second * metrics.active_vehicles,
-                }
-                writer.writerow(row)
-                csv_file.flush()
-                print(
-                    f"    -> {steps_per_second:.2f} steps/s, "
-                    f"active={metrics.active_vehicles}, "
-                    f"completed={metrics.completed_vehicles}",
-                    flush=True,
-                )
+                for spawn_rate in spawn_rate_values:
+                    for trial in range(1, args.repeats + 1):
+                        config = SimulationConfig(
+                            grid_width=size,
+                            grid_height=size,
+                            max_vehicles=args.max_vehicles,
+                            spawn_rate=spawn_rate,
+                            spawn_attempts_per_step=spawn_attempts,
+                        )
+                        print(
+                            f"  running {args.backend} grid={size}x{size} "
+                            f"spawn_attempts={spawn_attempts} spawn_rate={spawn_rate} "
+                            f"trial={trial}/{args.repeats}...",
+                            flush=True,
+                        )
+                        metrics, elapsed = run_one(args.backend, args.steps, config)
+                        steps_per_second = args.steps / elapsed if elapsed > 0 else 0.0
+                        row = {
+                            "backend": args.backend,
+                            "spawn_attempts": spawn_attempts,
+                            "steps": args.steps,
+                            "width": size,
+                            "height": size,
+                            "max_vehicles": args.max_vehicles,
+                            "spawn_rate": spawn_rate,
+                            "trial": trial,
+                            "elapsed_seconds": elapsed,
+                            "steps_per_second": steps_per_second,
+                            "active_vehicles": metrics.active_vehicles,
+                            "completed_vehicles": metrics.completed_vehicles,
+                            "average_queue_length": metrics.average_queue_length,
+                            "vehicle_steps_per_second": steps_per_second * metrics.active_vehicles,
+                        }
+                        writer.writerow(row)
+                        csv_file.flush()
+                        print(
+                            f"    -> {steps_per_second:.2f} steps/s, "
+                            f"active={metrics.active_vehicles}, "
+                            f"completed={metrics.completed_vehicles}",
+                            flush=True,
+                        )
 
 
 if __name__ == "__main__":
